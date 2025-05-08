@@ -1,5 +1,5 @@
 "use client"
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useRef } from "react";
 import {
   Background,
   ReactFlow,
@@ -35,16 +35,13 @@ const initialNodes = [
 let id = 1;
 const getId = () => `${id++}`;
 const nodeOrigin:[number,number] = [0.5, 0];
-type ExecutionUpdate ={
-  result:string,
-  stdout:string
-}
+
 const AddNodeOnEdgeDrop = () => {
   const reactFlowWrapper = useRef(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const [executionUpdate, setExecutionUpdate] = useState<ExecutionUpdate[]>([]);
+
 
   const { screenToFlowPosition } = useReactFlow();
   const onConnect: OnConnect = useCallback(
@@ -104,28 +101,75 @@ const AddNodeOnEdgeDrop = () => {
     }
     return order;
   }
-  async function runWorkflow(){
-    const firstNode = findFirstNode(nodes,edges);
-    if(!firstNode) return;
-    const execOrder = findLinearOrder(firstNode.id,edges);
+  async function runWorkflow() {
+    const firstNode = findFirstNode(nodes, edges);
+    if (!firstNode) return;
 
-    const scripts = execOrder?.map(eo=>{
-      const node = nodes.find(n=>n.id==eo);
-      return node?.data.text||"";
-    })
+    const execOrder = findLinearOrder(firstNode.id, edges);
+    if (!execOrder) return;
 
-    console.log(scripts);
+    for (let i = 0; i < execOrder.length; i++) {
+      const nodeId = execOrder[i];
+      const node = nodes.find((n) => n.id === nodeId);
+      const script = node?.data.text || "";
 
-    const res = await fetch("api/execute-workflow", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({scripts})
-    });
+      setNodes((nds) =>
+        nds.map((n) => ({
+          ...n,
+          data: {
+            ...n.data,
+            isExecuting: n.id === nodeId,
+            result: n.id === nodeId ? undefined : n.data.result, 
+            stdout: n.id === nodeId ? undefined : n.data.stdout,
+          },
+        }))
+      );
 
-    const data = await res.json();
-    console.log(data.results);
-    setExecutionUpdate(data.results);
+      const res = await fetch("api/execute-workflow", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scripts: [script] }),
+      });
+
+      const data = await res.json();
+      const result = data.results?.[0] || { result: "", stdout: "" };
+      console.log("Execution result for node", nodeId, data);
+
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === nodeId
+            ? {
+                ...n,
+                data: {
+                  ...n.data,
+                  result: result.result,
+                  stdout: result.stdout,
+                  isExecuting: false,
+                },
+              }
+            : n
+        )
+      );
+
+      await new Promise((res) => setTimeout(res, 200));
+    }
+    
+
   }
+  const addNodeManually = () => {
+    const idStr = getId();
+    const newNode: Node = {
+      id: idStr,
+      type: "text",
+      position: { x: 250, y: 100 }, // You can randomize or offset this
+      data: {
+        text: "",
+        isFirst: false,
+      },
+      origin: [0.5, 0.0],
+    };
+    setNodes((nds) => [...nds, newNode]);
+  };
 
   return (
     <div
@@ -133,49 +177,35 @@ const AddNodeOnEdgeDrop = () => {
       ref={reactFlowWrapper}
       style={{ width: "100%", height: "100vh", position: "relative" }}
     >
-      <div className="w-4/5 h-full ">
-        <ReactFlow
-          style={{ backgroundColor: "#F7F9FB" }}
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onConnectEnd={onConnectEnd}
-          fitView
-          nodeTypes={nodeTypes}
-          fitViewOptions={{ padding: 2 }}
-          nodeOrigin={nodeOrigin}
+      <ReactFlow
+        style={{ backgroundColor: "#F7F9FB" }}
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        onConnectEnd={onConnectEnd}
+        fitView
+        nodeTypes={nodeTypes}
+        fitViewOptions={{ padding: 2 }}
+        nodeOrigin={nodeOrigin}
+      >
+        <button
+          onClick={runWorkflow}
+          className="bg-blue-500 z-10 absolute hover:bg-blue-700 text-white font-bold py-2 px-4 border border-blue-700 rounded"
         >
-          <button
-            onClick={runWorkflow}
-            className="bg-blue-500 z-10 absolute hover:bg-blue-700 text-white font-bold py-2 px-4 border border-blue-700 rounded"
-          >
-            Run Workflow
-          </button>
-          <Background />
-        </ReactFlow>
-      </div>
-      <div className="overflow-y-auto w-1/5 h-full bg-gray-900 text-white p-4">
-        <h1 className="font-bold text-lg">Execution Results</h1>
-        {executionUpdate.length == 0 ? (
-          <p className="text-black ">No results yet</p>
-        ) : (
-          executionUpdate.map((res, idx) => {
-            return (
-              <div key={idx} className="mb-4 border-b border-gray-700 pb-2">
-                <p>
-                  <strong>Step {idx + 1}</strong>
-                </p>
-                <p>Result: {res.result ?? "N/A"}</p>
-                <p>Stdout: {res.stdout ?? "N/A"}</p>
-              </div>
-            );
-          })
-        )}
-      </div>
+          Run Workflow
+        </button>
+        <button
+          onClick={addNodeManually}
+          className="absolute top-4 right-4 z-20 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
+        >
+          + Add Node
+        </button>
+        <Background />
+      </ReactFlow>
     </div>
-  );
+  );  
 };
 
 const Workflow =  () => (
