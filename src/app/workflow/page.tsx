@@ -118,14 +118,13 @@ const AddNodeOnEdgeDrop = () => {
           ...n,
           data: {
             ...n.data,
-            isExecuting: n.id === nodeId,
             result: n.id === nodeId ? undefined : n.data.result, 
             stdout: n.id === nodeId ? undefined : n.data.stdout,
           },
         }))
       );
 
-      const res = await fetch("api/execute-workflow", {
+      const res = await fetch("/api/execute-workflow", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scripts: [script] }),
@@ -144,7 +143,6 @@ const AddNodeOnEdgeDrop = () => {
                   ...n.data,
                   result: result.result,
                   stdout: result.stdout,
-                  isExecuting: false,
                 },
               }
             : n

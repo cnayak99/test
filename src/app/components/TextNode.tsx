@@ -12,7 +12,6 @@ type TextNodeType = {
   isFirst: boolean;
   result?: string;
   stdout?: string;
-  isExecuting?: boolean;
 };
 function TextNode({ id, data }: NodeProps<Node<TextNodeType>>) {
   const { updateNodeData } = useReactFlow();
